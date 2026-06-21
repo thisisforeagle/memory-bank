@@ -7,8 +7,8 @@ Structured, drift-checked memory for AI agents (and humans). Each file under
 
 - **Agents**: `INDEX.md` is the digest (one line per record); open a record for
   the rationale before changing anything it anchors. Cite record IDs.
-- **Capture**: `/memory-bank:new` when a decision is made. **Verify**: `npm run memory:check`
-  (runs in CI). **Audit**: `/memory-bank:review`. **Re-stamp**: `npm run memory:sync`.
+- **Capture**: `/memorybank:new` when a decision is made. **Verify**: `npm run memory:check`
+  (runs in CI). **Audit**: `/memorybank:review`. **Re-stamp**: `npm run memory:sync`.
 - `INDEX.md` is **generated** — never hand-edit; regenerate with `npm run memory:index`.
 - Never delete a record that turned out wrong — mark it `status: superseded`
   with a `superseded-by:` pointer, so the history of *why* survives.

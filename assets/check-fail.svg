@@ -1,0 +1,29 @@
+<svg width="860" height="320" viewBox="0 0 860 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Terminal showing a memory:check drift failure">
+  <style>
+    .mono  { font-family:'SF Mono','JetBrains Mono',ui-monospace,'Cascadia Code',monospace; font-size:16px; }
+    .muted { fill:#7D8590; }
+    .txt   { fill:#C9D1D9; }
+    .cyan  { fill:#22D3EE; }
+    .red   { fill:#F85149; }
+    .green { fill:#3FB950; }
+  </style>
+  <rect width="860" height="320" rx="14" fill="#0D1117"/>
+  <rect width="860" height="44" rx="14" fill="#161B22"/>
+  <rect y="30" width="860" height="14" fill="#161B22"/>
+  <circle cx="26" cy="22" r="6" fill="#FF5F56"/>
+  <circle cx="48" cy="22" r="6" fill="#FFBD2E"/>
+  <circle cx="70" cy="22" r="6" fill="#27C93F"/>
+  <text x="430" y="27" text-anchor="middle" class="mono muted">CI&#160;&#8226;&#160;memory:check</text>
+
+  <g class="mono">
+    <text x="24" y="86"><tspan class="green">~/app</tspan><tspan class="muted">&#160;$&#160;</tspan><tspan class="txt">npm run memory:check</tspan></text>
+    <text x="24" y="118" class="muted">memory check: 12 records (12 active) &#8226; 27 assertions run</text>
+
+    <text x="24" y="162"><tspan class="red" font-weight="700">FAIL</tspan><tspan class="txt">&#160;FACT-001 assertion 1 (count): src/sample.ts</tspan></text>
+    <text x="24" y="188" class="txt">&#160;&#160;&#160;&#160;&#160;pattern <tspan class="cyan">'^\s*\| "'</tspan> expected <tspan class="green">3</tspan>, found <tspan class="red">4</tspan></text>
+    <text x="24" y="214" class="muted">&#160;&#160;&#160;&#160;&#160;-&gt; bump 'equals' in memory/records/facts/FACT-001-color-count.md</text>
+    <text x="24" y="240" class="muted">&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;or revert the code change</text>
+
+    <text x="24" y="284"><tspan class="red">1 failure(s).</tspan><tspan class="muted">&#160;&#160;exit 1&#160;&#160;the build is red until memory and code agree</tspan></text>
+  </g>
+</svg>

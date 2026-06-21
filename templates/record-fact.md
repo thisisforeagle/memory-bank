@@ -24,4 +24,4 @@ asserted. Other docs must reference this record by ID instead of the number.
 ## How to update
 
 When the underlying code legitimately changes, `memory check` fails naming this
-record — bump `equals` here, then run `/memory-bank:sync`.
+record — bump `equals` here, then run `/memorybank:sync`.

@@ -1,0 +1,50 @@
+<svg width="860" height="360" viewBox="0 0 860 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Animated terminal showing npm run memory:check passing">
+  <style>
+    .win   { fill:#0D1117; }
+    .bar   { fill:#161B22; }
+    .mono  { font-family:'SF Mono','JetBrains Mono',ui-monospace,'Cascadia Code',monospace; font-size:17px; }
+    .muted { fill:#7D8590; }
+    .txt   { fill:#C9D1D9; }
+    .cyan  { fill:#22D3EE; }
+    .green { fill:#3FB950; }
+    .yellow{ fill:#D29922; }
+    .pink  { fill:#F778BA; }
+    .l1 { opacity:0; animation: l1 9s infinite ease-out; }
+    .l2 { opacity:0; animation: l2 9s infinite ease-out; }
+    .l3 { opacity:0; animation: l3 9s infinite ease-out; }
+    .l4 { opacity:0; animation: l4 9s infinite ease-out; }
+    .l5 { opacity:0; animation: l5 9s infinite ease-out; }
+    .cur{ animation: blink 1.06s steps(1) infinite; }
+    @keyframes l1 { 0%,3%{opacity:0} 7%,93%{opacity:1} 100%{opacity:0} }
+    @keyframes l2 { 0%,20%{opacity:0} 24%,93%{opacity:1} 100%{opacity:0} }
+    @keyframes l3 { 0%,34%{opacity:0} 38%,93%{opacity:1} 100%{opacity:0} }
+    @keyframes l4 { 0%,50%{opacity:0} 55%,93%{opacity:1} 100%{opacity:0} }
+    @keyframes l5 { 0%,66%{opacity:0} 71%,93%{opacity:1} 100%{opacity:0} }
+    @keyframes blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+  </style>
+
+  <rect width="860" height="360" rx="14" class="win"/>
+  <rect width="860" height="44" rx="14" class="bar"/>
+  <rect y="30" width="860" height="14" class="bar"/>
+  <circle cx="26" cy="22" r="6" fill="#FF5F56"/>
+  <circle cx="48" cy="22" r="6" fill="#FFBD2E"/>
+  <circle cx="70" cy="22" r="6" fill="#27C93F"/>
+  <text x="430" y="27" text-anchor="middle" class="mono muted">memorybank&#160;&#8226;&#160;check</text>
+
+  <g class="mono">
+    <!-- command line, always visible with blinking cursor -->
+    <text x="28" y="92"><tspan class="green">~/app</tspan><tspan class="muted">&#160;$&#160;</tspan><tspan class="txt">npm run memory:check</tspan></text>
+    <rect class="cur" x="322" y="78" width="9" height="19" fill="#C9D1D9"/>
+
+    <text class="l1 txt" x="28" y="132">memory check: <tspan class="cyan">12 records</tspan> (12 active)</text>
+    <text class="l2 txt" x="28" y="164"><tspan class="muted">&#8226;</tspan> 27 assertions run <tspan class="muted">&#8226;</tspan> 2 unverifiable (type: none)</text>
+    <text class="l3 txt" x="28" y="196"><tspan class="muted">&#8226;</tspan> INDEX.md fresh</text>
+
+    <text class="l4" x="28" y="244"><tspan class="green" font-weight="700">PASS</tspan><tspan class="txt">&#160;&#160;all assertions hold, memory matches code</tspan></text>
+
+    <g class="l5">
+      <text x="28" y="300"><tspan class="green">~/app</tspan><tspan class="muted">&#160;$&#160;</tspan><tspan class="muted">git commit -m "feat: ship it"</tspan></text>
+      <rect x="410" y="286" width="9" height="19" fill="#7D8590"/>
+    </g>
+  </g>
+</svg>

@@ -1,100 +1,285 @@
-# memory-bank — drift-checked memory records for AI agents
+<p align="center">
+  <img src="assets/banner.svg" alt="memorybank - drift-checked memory records for AI agents" width="100%">
+</p>
 
-A Claude Code plugin that gives any repository a **structured memory system**:
-design decisions, conventions, volatile facts, feature invariants, and
-intentionally-deferred work captured as one-file-per-record markdown with rigid
-YAML frontmatter — each carrying **machine-verifiable assertions** that fail CI
-when memory and code diverge.
+<p align="center">
+  <img src="https://img.shields.io/badge/Claude%20Code-plugin-6366F1?style=flat-square&labelColor=0D1117" alt="Claude Code plugin">
+  <img src="https://img.shields.io/badge/version-0.1.0-22D3EE?style=flat-square&labelColor=0D1117" alt="version 0.1.0">
+  <img src="https://img.shields.io/badge/skills-5-A78BFA?style=flat-square&labelColor=0D1117" alt="5 skills">
+  <img src="https://img.shields.io/badge/hooks-3%20non--blocking-3FB950?style=flat-square&labelColor=0D1117" alt="3 non-blocking hooks">
+  <img src="https://img.shields.io/badge/runtime%20deps-0-3FB950?style=flat-square&labelColor=0D1117" alt="zero runtime dependencies">
+</p>
 
-## Why
+<p align="center">
+  <b>memorybank</b> gives any repository a structured memory system that an AI agent cannot quietly let rot.<br>
+  Decisions, conventions, volatile facts, feature invariants, and intentionally-deferred work become<br>
+  one-file-per-record markdown carrying <b>machine-verifiable assertions</b> that fail CI when memory and code diverge.
+</p>
 
-Markdown memory files (CLAUDE.md and friends) drift: counts go stale, recipes
-reference removed APIs, deliberate gaps get "fixed" by well-meaning agents.
-memory-bank makes every memory claim either *asserted* (CI-checked against the
-code) or *explicitly marked unverifiable* — and keeps the rationale (the WHY)
-one `Read` away from the code it governs.
+<p align="center">
+  <img src="assets/demo-check.svg" alt="Terminal demo of npm run memory:check passing" width="86%">
+</p>
 
-## The model
+<p align="center">
+  <a href="#setup">Initial setup</a> &#160;&#183;&#160;
+  <a href="#model">The model</a> &#160;&#183;&#160;
+  <a href="#hooks">Hook recommendations</a> &#160;&#183;&#160;
+  <a href="#commands">Commands</a> &#160;&#183;&#160;
+  <a href="#tips">Tips</a>
+</p>
+
+---
+
+## Why this exists
+
+Plain markdown memory (CLAUDE.md and friends) drifts. Counts go stale, recipes reference removed APIs,
+and deliberate gaps get "fixed" by a well-meaning agent on the next pass. memorybank makes every memory
+claim either **asserted** (checked against the code in CI) or **explicitly marked unverifiable**, and keeps
+the rationale, the WHY, one `Read` away from the code it governs. A legitimate change that breaks an assertion
+turns CI red and names the record to update. That friction is the point: memory and code can only move together.
+
+<br>
+
+<a id="setup"></a>
+
+## <img src="assets/icons/setup.svg" height="23" align="top"> &nbsp;Initial setup
+
+### Requirements
+
+| Requirement | Why |
+|---|---|
+| [Claude Code](https://docs.claude.com/en/docs/claude-code) | host for the plugin |
+| Node.js 18+ with `npx`/`tsx` | runs the zero-dependency checker (`memory.ts`) |
+| A git repository | assertions and staleness use `git ls-files` and `git diff` |
+| `jq` (recommended) | enables the edit-time and stop hooks |
+
+### 1. Install the plugin
+
+```bash
+claude plugin marketplace add thisisforeagle/memory-bank
+claude plugin install memorybank@091solutions
+```
+
+Verify it registered:
+
+```bash
+claude plugin list        # memorybank@091solutions  -  enabled
+```
+
+### 2. Adopt it in a repository
+
+Inside the target repo, run the init skill from Claude Code:
 
 ```
+/memorybank:init
+```
+
+This is a one-time setup that:
+
+1. Scaffolds `memory/records/{decisions,conventions,facts,features,deferred}/`.
+2. **Vendors the checker** into `memory/memory.ts` so CI never depends on the plugin being installed.
+3. Adds `memory:check`, `memory:index`, `memory:stale`, and `memory:sync` package scripts.
+4. Generates `memory/INDEX.md` and `@`-imports it from `CLAUDE.md`.
+5. Wires a `memory:check` step into your CI workflow.
+
+### 3. Capture your first records
+
+Good starter candidates: locked architecture decisions, "intentionally not done" items, and every volatile
+count currently hardcoded in prose.
+
+```
+/memorybank:new fact "Color union has 3 members"
+```
+
+<br>
+
+<a id="model"></a>
+
+## <img src="assets/icons/model.svg" height="23" align="top"> &nbsp;The model
+
+Every record is one file with rigid YAML frontmatter plus a body. The frontmatter is machine-checked;
+the body holds the `## Why` that stops future re-litigation.
+
+```text
 memory/
-├── INDEX.md                  # GENERATED digest — @-import it from CLAUDE.md
-├── README.md
-└── records/
-    ├── conventions/CONV-001-….md     # rules agents must follow
-    ├── decisions/DEC-001-….md        # locked choices + rejected alternatives
-    ├── facts/FACT-001-….md           # volatile values (counts) — asserted, never hardcoded in prose
-    ├── features/FEAT-001-….md        # shipped behaviour + invariants
-    └── deferred/DEF-001-….md         # intentionally NOT done — don't "fix"
+├─ INDEX.md                         generated digest, @-imported from CLAUDE.md
+├─ README.md
+└─ records/
+   ├─ decisions/DEC-001-*.md        locked choices and rejected alternatives
+   ├─ conventions/CONV-001-*.md     rules agents must follow
+   ├─ facts/FACT-001-*.md           volatile values, asserted not hardcoded in prose
+   ├─ features/FEAT-001-*.md        shipped behaviour and invariants
+   └─ deferred/DEF-001-*.md         intentionally NOT done, do not "fix"
 ```
 
-Each record: frontmatter (`id`, `kind`, `status`, one-line `rule`, `anchors`
-to the files it governs, `assertions`, `verified` stamp) + body (`## Why` —
-the rationale that stops future re-litigation).
+### Assertion language
 
-### Assertion language (the whole spec)
+This is the whole specification. Patterns are JavaScript regexes (`m` flag; `count` adds `g`).
 
 | Type | Fields | Passes when |
 |---|---|---|
 | `file-exists` | `path` | the path exists |
-| `symbol-exists` | `path`, `pattern` | regex matches in the file (anchor still present) |
-| `count` | `path`, `pattern`, `equals` | regex match count equals N |
-| `forbidden` | `glob`, `pattern`, `allow?` | zero matches across tracked+untracked files in the glob |
-| `command` | `run`, `timeout?` | the shell command exits 0 (delegate to existing repo checks) |
-| `none` | `reason` | always — explicitly unverifiable, kept honest in coverage stats |
+| `symbol-exists` | `path`, `pattern` | the regex matches in the file (the anchor is still present) |
+| `count` | `path`, `pattern`, `equals` | the match count equals N |
+| `forbidden` | `glob`, `pattern`, `allow?` | zero matches across tracked and untracked files in the glob |
+| `command` | `run`, `timeout?` | the shell command exits 0 (delegate to an existing repo check) |
+| `none` | `reason` | always, an explicitly unverifiable record kept honest in coverage stats |
 
-Patterns are JS regexes (`m` flag; `count` adds `g`). Quote them in single
-quotes in the frontmatter.
+A real `fact` record, end to end:
 
-## The checker
+```yaml
+---
+id: FACT-001
+title: Color union size
+kind: fact
+status: active
+rule: "Color in src/sample.ts has 3 members; never hardcode this count in prose."
+anchors:
+  - path: src/sample.ts
+    symbol: 'export type Color'
+assertions:
+  - type: count
+    path: src/sample.ts
+    pattern: '^\s*\| "'
+    equals: 3
+created: 2026-06-12
+---
 
-`scripts/memory.ts` — single file, node builtins only, run with `tsx`:
-
-```
-memory check    [--json] [--skip-commands]   # verify everything; exit 1 on drift (the CI gate)
-memory verify   <id>                         # one record
-memory stale                                 # anchors changed since last verified sha (semantic-drift candidates)
-memory index                                 # regenerate memory/INDEX.md (freshness is CI-gated)
-memory anchors  --match <file>               # which records govern this file
-memory new      <kind> --title "..."         # scaffold a record
-memory sync     [--skip-commands]            # green check, then stamp verified: on all records
-```
-
-## What the plugin ships
-
-- **Skills**: `/memory-bank:init` (adopt in a repo), `/memory-bank:new` (capture at the
-  moment of decision), `/memory-bank:check`, `/memory-bank:review` (audit + reconcile),
-  `/memory-bank:sync`.
-- **Hooks** (never block, silent without `memory/`):
-  - *SessionStart* — staleness digest (record count, stale records, last sync).
-  - *PostToolUse* — when an edited file is anchored by records, nudge with their IDs + rules.
-  - *Stop* — once per session: if anchored files changed but `memory/` didn't, remind the agent to capture or consciously skip.
-- **Templates** for all five record kinds.
-
-## Adopting in a repo
-
-1. Install the plugin, run `/memory-bank:init` — scaffolds `memory/`, vendors the
-   checker (`memory/memory.ts`) so CI never depends on plugin installation,
-   adds `memory:*` package scripts, wires the CI step, and @-imports
-   `memory/INDEX.md` from CLAUDE.md.
-2. Capture your first records: locked architecture decisions, "intentionally
-   not done" items, and every volatile count currently hardcoded in docs.
-3. The maintenance loop is deliberate: a legitimate code change that breaks a
-   `count` assertion **fails CI** — the failure message names the record;
-   bump it in the same PR. That friction is the feature: memory and code can
-   only move together.
-
-## Maintenance loop (day-to-day)
-
-- Made a decision? `/memory-bank:new` before the session ends (the Stop hook reminds you once).
-- CI red on `memory:check`? The failure names the record and the fix direction — reconcile, never bypass.
-- Weekly-ish: `/memory-bank:review` to catch semantic drift (`memory stale`), then `memory sync`.
-
-## Self-test
-
-```
-plugins/memory-bank/scripts/selftest.sh
+## Why
+The member count drifts when restated in prose. This record is the single place it is asserted.
 ```
 
-Runs the checker against `fixtures/pass` (must be green) and `fixtures/fail`
-(must fail) — also useful as living documentation of the record format.
+<br>
+
+<a id="hooks"></a>
+
+## <img src="assets/icons/hooks.svg" height="23" align="top"> &nbsp;Hook recommendations
+
+The plugin ships three hooks that register automatically on install. **None of them block your work** and
+all are **silent in repositories without a `memory/` directory**, so the recommendation is simple: leave them
+enabled. Each degrades gracefully when an optional tool is missing.
+
+| Hook | Fires on | What it does | Needs |
+|---|---|---|---|
+| **SessionStart** | new session | Adds a status line: record count, stale records, last sync. Full digest still arrives via `@memory/INDEX.md`. | `node`, `npx tsx` (falls back to a bare count) |
+| **PostToolUse** | `Edit` / `Write` / `MultiEdit` | If the edited file is anchored by records, surfaces their IDs and rules so you reconcile before drifting. Pure bash/awk, no per-edit startup cost. | `jq`, `node` |
+| **Stop** | end of turn | Once per session: if anchored files changed but nothing under `memory/` did, reminds you to capture the decision or consciously skip. | `jq`, `node` |
+
+What the edit-time nudge looks like in practice:
+
+```text
+┌───────────────────────────────────────────────────────────────┐
+│ MEMORY ANCHOR NUDGE                                             │
+│ File: src/sample.ts is anchored by 1 memory record(s):         │
+│   FACT-001: Color in src/sample.ts has 3 members; never        │
+│   hardcode this count in prose.                                 │
+│ If your change alters recorded behaviour, update the record    │
+│ or run /memorybank:review. Counts will fail memory:check.      │
+└───────────────────────────────────────────────────────────────┘
+```
+
+**Recommendations**
+
+- **Install `jq` and make `npx tsx` resolvable.** Two of the three hooks need `jq`, and the staleness line
+  needs `tsx`. Without them the hooks stay silent rather than erroring, so you simply lose signal.
+- **Treat hooks as advisory, CI as the gate.** The hooks remind a human or agent in the moment; the real
+  enforcement is `memory:check` in CI. Keep both.
+- **Ignore the debounce state file.** The Stop hook records one nudge per session in
+  `.claude/.memory-stop-nudge`. Add it to `.gitignore`.
+- **Disable selectively, not globally.** If one hook is noisy in a specific repo, turn off that single hook
+  in your settings rather than disabling the plugin and losing the others.
+
+<br>
+
+<a id="commands"></a>
+
+## <img src="assets/icons/commands.svg" height="23" align="top"> &nbsp;Commands
+
+| Command | Use it to |
+|---|---|
+| `/memorybank:init` | Adopt memorybank in a repo: scaffold, vendor the checker, wire CI. Run once. |
+| `/memorybank:new` | Capture a decision, convention, fact, feature, or deferred item at the moment it happens. |
+| `/memorybank:check` | Run the drift checker and explain any failure (which side drifted, how to reconcile). |
+| `/memorybank:review` | Full audit: hard failures plus semantic-drift candidates, with proposed record updates. |
+| `/memorybank:sync` | After a green check, regenerate `INDEX.md` and stamp `verified` on every active record. |
+
+Under the hood each command drives the vendored `memory.ts` checker, which you can also call directly:
+
+```bash
+npm run memory:check          # verify everything, exit 1 on drift  (the CI gate)
+npm run memory:index          # regenerate memory/INDEX.md
+npm run memory:stale          # records whose anchors moved since last verified sha
+npm run memory:sync           # green check, then stamp verified on all records
+```
+
+<br>
+
+## <img src="assets/icons/loop.svg" height="23" align="top"> &nbsp;The maintenance loop
+
+```mermaid
+flowchart LR
+    A["Edit code"] --> B{"File anchored<br/>by a record?"}
+    B -- yes --> C["PostToolUse hook<br/>names the record IDs"]
+    B -- no --> S["Stop hook checks:<br/>anchors changed,<br/>memory untouched?"]
+    C --> N["Capture or update<br/>/memorybank:new"]
+    S -- reminds once --> N
+    N --> K["memory:check in CI"]
+    K -- red --> R["Reconcile in the<br/>same pull request"]
+    R --> K
+    K -- green --> V["/memorybank:sync<br/>stamp verified"]
+```
+
+A legitimate code change that breaks a `count` assertion fails CI. The failure message names the record and
+the fix direction. You bump it in the same pull request. There is no bypass path, and that is the design.
+
+<br>
+
+<a id="tips"></a>
+
+## <img src="assets/icons/tips.svg" height="23" align="top"> &nbsp;Tips for usage
+
+- **Capture at the moment of decision.** The cheapest time to write a record is right after you make the call.
+  The Stop hook reminds you once per session, but do not rely on it as the primary trigger.
+- **Prefer a verifiable assertion over `none`.** Reach for `count`, `symbol-exists`, `forbidden`, or `command`
+  first. Use `type: none` only for genuinely unverifiable process rules, and always give a `reason`.
+- **Move volatile counts out of prose.** Anything numeric that appears in documentation belongs in a `fact`
+  record with a `count` assertion. Have the prose reference the record ID instead of restating the number.
+- **Check what governs a file before you edit it:** `npx tsx memory/memory.ts anchors --match src/sample.ts`
+  lists the records anchored to it.
+- **Never bypass a red `memory:check`.** Red means memory and code disagree. Reconcile by bumping the record
+  for a legitimate change, or by fixing the code for a violation. Both directions are correct; skipping is not.
+- **Review weekly-ish.** `/memorybank:review` catches semantic drift: records whose assertions still pass but
+  whose anchored code moved. Finish with `/memorybank:sync` to re-stamp.
+- **Retiring a record is a decision.** Do not delete records silently. Set `status: superseded` with a
+  `superseded-by` pointer (or `retired`) and explain why in the body.
+- **Keep `INDEX.md` committed.** CI gates its freshness, so regenerate and commit it alongside record changes.
+
+What a caught drift looks like in CI:
+
+<p align="center">
+  <img src="assets/check-fail.svg" alt="Terminal showing a memory:check drift failure" width="86%">
+</p>
+
+<br>
+
+## Self-test and development
+
+The checker ships with golden fixtures that double as living documentation of the record format:
+
+```bash
+scripts/selftest.sh           # fixtures/pass must be green, fixtures/fail must fail
+```
+
+To validate a record set by hand from anywhere:
+
+```bash
+npx tsx scripts/memory.ts check --root fixtures/pass
+```
+
+<br>
+
+---
+
+<p align="center">
+  <sub>Built by <b>091 Solutions</b> &#160;&#183;&#160; a Claude Code plugin &#160;&#183;&#160; <code>memorybank@091solutions</code></sub>
+</p>
