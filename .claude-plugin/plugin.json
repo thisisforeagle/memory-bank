@@ -1,9 +1,9 @@
 {
-  "name": "memory-bank",
+  "name": "memorybank",
   "description": "Structured, drift-checked memory records for AI agents: decisions, conventions, facts, features, and deferred work — with CI-verifiable assertions that fail the build when memory and code diverge.",
   "version": "0.1.0",
   "author": {
-    "name": "AuditBuild"
+    "name": "091 Solutions"
   },
   "keywords": ["memory", "drift", "decisions", "adr", "conventions", "ci"]
 }
