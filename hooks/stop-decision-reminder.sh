@@ -39,9 +39,12 @@ fi
 # both (over-approximating can only make the reminder fire more readily).
 CHANGED=$(cd "$ROOT" && git status --porcelain -z 2>/dev/null | while IFS= read -r -d '' entry; do
   printf '%s\n' "${entry:3}"
-  case "$entry" in
-    R*|C*) IFS= read -r -d '' orig && printf '%s\n' "$orig" ;;
-  esac
+  # Rename/copy entries (status code R*/C*) carry the original path in a second
+  # NUL field — emit it too. Prefix-strip tests instead of `case … ;;`: bash 3.2
+  # (the version macOS ships) mis-parses a `case` inside `$( … )`.
+  if [ "${entry#R}" != "$entry" ] || [ "${entry#C}" != "$entry" ]; then
+    IFS= read -r -d '' orig && printf '%s\n' "$orig"
+  fi
 done)
 [ -z "$CHANGED" ] && emit_continue
 
