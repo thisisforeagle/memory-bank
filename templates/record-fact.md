@@ -3,7 +3,7 @@ id: {{ID}}
 title: {{TITLE}}
 kind: fact
 status: active
-rule: "ONE-LINE statement of the volatile fact, citing where it lives — never hardcode this value in prose elsewhere."
+rule: "ONE line, caveman-terse: the volatile fact + where it lives — never hardcode value in prose."
 anchors:
   - path: path/to/source/of/truth.ts
 assertions:
@@ -18,10 +18,10 @@ created: {{DATE}}
 
 ## Why
 
-This value drifts when stated in prose; this record is the single place it is
-asserted. Other docs must reference this record by ID instead of the number.
+Value drifts when stated in prose; asserted here, once. Other docs reference
+this record ID, not the number.
 
 ## How to update
 
-When the underlying code legitimately changes, `memory check` fails naming this
-record — bump `equals` here, then run `/memorybank:sync`.
+Legit code change → `memory check` fails naming this record — bump `equals`
+here, then `/memorybank:sync`.

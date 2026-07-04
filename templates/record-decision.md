@@ -3,7 +3,7 @@ id: {{ID}}
 title: {{TITLE}}
 kind: decision
 status: active
-rule: "ONE-LINE statement of what was decided (the locked outcome, not the discussion)."
+rule: "ONE line, caveman-terse: the locked outcome, not the discussion (see memory/STYLE.md)."
 anchors:
   - path: path/to/file/that/embodies/the/decision.ts
 assertions:
@@ -17,9 +17,9 @@ created: {{DATE}}
 
 ## Why
 
-What problem this decision solved, what alternatives were rejected and why.
-This is the section that stops a future agent from re-litigating the choice.
+Problem solved; alternatives rejected + why. <=3 lines. Stops future agent
+re-litigating the choice.
 
 ## Consequences
 
-What this decision makes easy / hard. What would have to be true to revisit it.
+What this makes easy / hard. What must change to revisit.

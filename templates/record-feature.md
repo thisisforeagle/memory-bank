@@ -3,7 +3,7 @@ id: {{ID}}
 title: {{TITLE}}
 kind: feature
 status: active
-rule: "ONE-LINE description of what the feature does and where its surface lives."
+rule: "ONE line, caveman-terse: what feature does + where its surface lives."
 anchors:
   - path: path/to/feature/entrypoint.tsx
 assertions:
@@ -17,8 +17,8 @@ created: {{DATE}}
 
 ## What it does
 
-Behaviour summary: inputs, outputs, who can use it (roles), and the happy path.
+Inputs, outputs, roles, happy path. <=4 lines.
 
 ## Edge cases & invariants
 
-The non-obvious behaviours an agent must preserve when touching this feature.
+Non-obvious behaviours agent must preserve when touching this feature.

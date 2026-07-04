@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude%20Code-plugin-6366F1?style=flat-square&labelColor=0D1117" alt="Claude Code plugin">
-  <img src="https://img.shields.io/badge/version-0.1.0-22D3EE?style=flat-square&labelColor=0D1117" alt="version 0.1.0">
+  <img src="https://img.shields.io/badge/version-0.2.0-22D3EE?style=flat-square&labelColor=0D1117" alt="version 0.2.0">
   <img src="https://img.shields.io/badge/skills-5-A78BFA?style=flat-square&labelColor=0D1117" alt="5 skills">
   <img src="https://img.shields.io/badge/hooks-3%20non--blocking-3FB950?style=flat-square&labelColor=0D1117" alt="3 non-blocking hooks">
   <img src="https://img.shields.io/badge/runtime%20deps-0-3FB950?style=flat-square&labelColor=0D1117" alt="zero runtime dependencies">
@@ -74,16 +74,25 @@ Inside the target repo, run the init skill from Claude Code:
 /memorybank:init
 ```
 
-This is a one-time setup that:
+This is a one-time setup. It starts with a **feature menu** — you choose what to enable (best-practice
+seeding, testing setup, caveman record style, CI wiring); core scaffolding is always done. Then it:
 
-1. Scaffolds `memory/records/{decisions,conventions,facts,features,deferred}/`.
+1. Scaffolds `memory/records/{decisions,conventions,facts,features,deferred}/` (plus `memory/STYLE.md`
+   if you chose the caveman style).
 2. **Vendors the checker** into `memory/memory.ts` so CI never depends on the plugin being installed.
 3. Adds `memory:check`, `memory:index`, `memory:stale`, and `memory:sync` package scripts.
-4. Generates `memory/INDEX.md` and `@`-imports it from `CLAUDE.md`.
-5. Wires a `memory:check` step into your CI workflow.
+4. **Seeds 5–12 stack-specific starter records** (if enabled): detects your stack from manifests, fetches
+   current best practices live (Context7/web, degrades gracefully offline), and proposes bug-prevention
+   rules, feature-building patterns, deferred items, and testing conventions — for your confirmation
+   before anything is written.
+5. **Offers guided test-framework setup** (if enabled): when your stack lacks one (e.g. a web app with no
+   e2e), it asks before adding Playwright with a minimal config and one example spec — no suite generation.
+6. Generates `memory/INDEX.md` and `@`-imports it from `CLAUDE.md`.
+7. Wires a `memory:check` step into your CI workflow (if enabled).
 
 ### 3. Capture your first records
 
+Init pre-seeds stack-level records; use `/memorybank:new` for everything project-specific it couldn't infer.
 Good starter candidates: locked architecture decisions, "intentionally not done" items, and every volatile
 count currently hardcoded in prose.
 
@@ -125,6 +134,9 @@ This is the whole specification. Patterns are JavaScript regexes (`m` flag; `cou
 | `command` | `run`, `timeout?` | the shell command exits 0 (delegate to an existing repo check) |
 | `none` | `reason` | always, an explicitly unverifiable record kept honest in coverage stats |
 
+`forbidden` globs are git pathspecs: write `:(glob)src/**/*.ts` for true `**` semantics — a bare
+`src/**/*.ts` silently skips files directly in `src/`, and a glob that matches nothing passes vacuously.
+
 A real `fact` record, end to end:
 
 ```yaml
@@ -148,6 +160,14 @@ created: 2026-06-12
 ## Why
 The member count drifts when restated in prose. This record is the single place it is asserted.
 ```
+
+### Caveman compression
+
+Records and `INDEX.md` load into every agent session, so every token costs. When enabled at init, record
+prose follows `memory/STYLE.md` (shipped from the plugin's [`templates/style.md`](templates/style.md)):
+terse imperative fragments, no filler, token budgets for `rule:` lines and `## Why` bodies — and **never**
+compress load-bearing tokens like paths, symbols, regexes, or record IDs. Since each `INDEX.md` row is the
+record's `rule:` line verbatim, trimming rules at the source keeps the session digest lean automatically.
 
 <br>
 
