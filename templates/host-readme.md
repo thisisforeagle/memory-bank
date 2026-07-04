@@ -10,6 +10,8 @@ Structured, drift-checked memory for AI agents (and humans). Each file under
 - **Capture**: `/memorybank:new` when a decision is made. **Verify**: `npm run memory:check`
   (runs in CI). **Audit**: `/memorybank:review`. **Re-stamp**: `npm run memory:sync`.
 - `INDEX.md` is **generated** — never hand-edit; regenerate with `npm run memory:index`.
+- Record prose style: if `STYLE.md` exists here, follow it (caveman-terse — records
+  load into every session, tokens cost).
 - Never delete a record that turned out wrong — mark it `status: superseded`
   with a `superseded-by:` pointer, so the history of *why* survives.
 

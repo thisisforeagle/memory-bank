@@ -3,12 +3,12 @@ id: {{ID}}
 title: {{TITLE}}
 kind: convention
 status: active
-rule: "ONE-LINE imperative rule an agent can apply without opening this file."
+rule: "ONE line, imperative, terse (memory/STYLE.md if present) — agent applies without opening file."
 anchors:
   - path: path/to/governed/file.ts
 assertions:
   - type: forbidden
-    glob: "src/**/*.ts"
+    glob: ":(glob)src/**/*.ts"
     pattern: 'the-anti-pattern-regex'
 links: []
 owners: []
@@ -17,9 +17,8 @@ created: {{DATE}}
 
 ## Why
 
-The rationale. What breaks (or has broken) when this convention is violated.
+What breaks when violated. <=3 lines, terse (memory/STYLE.md if present).
 
 ## How to apply
 
-Concrete instructions: which helper/predicate/pattern to use instead, where the
-canonical example lives.
+Which helper/pattern instead; where canonical example lives.
