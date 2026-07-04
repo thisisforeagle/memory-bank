@@ -23,7 +23,7 @@ Set up the memory-bank system in the current repository. Steps:
    - `memory:stale` → `tsx <checker path> stale`
    - `memory:sync` → `tsx <checker path> sync`
    - Ensure `tsx` is available (devDependency or `npx tsx`).
-6. **Seed from stack** (skip entirely if the user declined seeding) — distill current best practices for THIS repo's stack into starter records. Read `memory/STYLE.md` first (if present); every seeded record follows it.
+6. **Seed from stack** — distill current best practices for THIS repo's stack into starter records. Read `memory/STYLE.md` first (if present); every seeded record follows it. Skipping: if the user declined seeding but enabled testing, still run sub-steps a (stack detection), d, e, and f for the testing records only; if both were declined, skip this step entirely.
    - a. **Detect the stack.** Read manifests, do not guess:
      - `package.json` deps/devDeps → framework (next, react, vue, svelte, express, fastify, …), language (typescript), test tools (playwright, vitest, jest, cypress), styling/data (tailwind, prisma, drizzle, …)
      - `pyproject.toml` / `requirements.txt` → django, fastapi, flask, pytest

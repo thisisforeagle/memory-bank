@@ -3,7 +3,7 @@ id: {{ID}}
 title: {{TITLE}}
 kind: decision
 status: active
-rule: "ONE line, caveman-terse: the locked outcome, not the discussion (see memory/STYLE.md)."
+rule: "ONE line, terse: the locked outcome, not the discussion (memory/STYLE.md if present)."
 anchors:
   - path: path/to/file/that/embodies/the/decision.ts
 assertions:

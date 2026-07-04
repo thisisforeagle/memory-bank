@@ -3,7 +3,7 @@ id: {{ID}}
 title: {{TITLE}}
 kind: convention
 status: active
-rule: "ONE line, imperative, caveman-terse (see memory/STYLE.md) — agent applies without opening file."
+rule: "ONE line, imperative, terse (memory/STYLE.md if present) — agent applies without opening file."
 anchors:
   - path: path/to/governed/file.ts
 assertions:
@@ -17,7 +17,7 @@ created: {{DATE}}
 
 ## Why
 
-What breaks when violated. <=3 lines, terse (memory/STYLE.md).
+What breaks when violated. <=3 lines, terse (memory/STYLE.md if present).
 
 ## How to apply
 
