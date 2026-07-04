@@ -52,6 +52,7 @@ turns CI red and names the record to update. That friction is the point: memory 
 | Node.js 18+ with `npx`/`tsx` | runs the zero-dependency checker (`memory.ts`) |
 | A git repository | assertions and staleness use `git ls-files` and `git diff` |
 | `jq` (recommended) | enables the edit-time and stop hooks |
+| Network / Context7 MCP (optional) | live best-practice seeding at init — degrades gracefully offline |
 
 ### 1. Install the plugin
 
@@ -113,6 +114,7 @@ the body holds the `## Why` that stops future re-litigation.
 memory/
 ├─ INDEX.md                         generated digest, @-imported from CLAUDE.md
 ├─ README.md
+├─ STYLE.md                         caveman style guide (present when enabled at init)
 └─ records/
    ├─ decisions/DEC-001-*.md        locked choices and rejected alternatives
    ├─ conventions/CONV-001-*.md     rules agents must follow
@@ -217,7 +219,7 @@ What the edit-time nudge looks like in practice:
 
 | Command | Use it to |
 |---|---|
-| `/memorybank:init` | Adopt memorybank in a repo: scaffold, vendor the checker, wire CI. Run once. |
+| `/memorybank:init` | Adopt memorybank in a repo: pick features, scaffold, vendor the checker, seed stack best practices + testing, wire CI. Run once. |
 | `/memorybank:new` | Capture a decision, convention, fact, feature, or deferred item at the moment it happens. |
 | `/memorybank:check` | Run the drift checker and explain any failure (which side drifted, how to reconcile). |
 | `/memorybank:review` | Full audit: hard failures plus semantic-drift candidates, with proposed record updates. |
