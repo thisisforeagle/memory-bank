@@ -12,7 +12,8 @@
  * Subcommands:
  *   check    [--json] [--skip-commands] [--root <dir>]   verify everything, exit 1 on drift
  *   verify   <id> [--root <dir>]                          verify a single record
- *   stale    [--root <dir>]                               records whose anchors changed since last sync
+ *   stale    [--json] [--root <dir>]                      records whose anchors changed since last sync
+ *                                                         (three-state: stale / unknown on a shallow clone / fresh)
  *   index    [--root <dir>]                               regenerate memory/INDEX.md
  *   anchors  --match <file> [--root <dir>]                record IDs anchored to a file
  *   new      <kind> --title "..." [--root <dir>]          scaffold a record from templates/
@@ -986,7 +987,7 @@ function main(): number {
         "usage: memory <check|verify|stale|index|anchors|new|sync> [options]\n" +
         "  check    [--json] [--skip-commands]   verify all records + INDEX freshness (exit 1 on drift)\n" +
         "  verify   <id>                         verify a single record\n" +
-        "  stale    —                            records whose anchors changed since last verified sha\n" +
+        "  stale    [--json]                     records whose anchors changed since last verified sha\n" +
         "  index    —                            regenerate memory/INDEX.md\n" +
         "  anchors  --match <file>               record IDs anchored to a file (TSV: id, rule)\n" +
         '  new      <kind> --title "..."         scaffold a record (decision|convention|fact|feature|deferred)\n' +
