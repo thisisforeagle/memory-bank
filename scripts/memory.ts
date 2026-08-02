@@ -679,7 +679,7 @@ function cmdCheck(root: string, opts: { json: boolean; skipCommands: boolean; on
   return 1;
 }
 
-function cmdStale(root: string): number {
+function cmdStale(root: string, opts: { json: boolean }): number {
   const { records, errors } = loadRecords(root);
   if (errors.length) {
     for (const e of errors) console.error(`SCHEMA ${e.message}`);
@@ -688,11 +688,23 @@ function cmdStale(root: string): number {
   const active = records.filter((r) => r.status === "active");
   const lastSync = active.map((r) => r.verified?.date ?? "").filter(Boolean).sort().pop() ?? "never";
 
-  const staleLines: string[] = [];
+  // On a shallow clone (CI default: fetch-depth 1) almost no verified sha
+  // resolves, so an unresolvable sha means "cannot tell", not "stale". Detect
+  // shallowness once up front and keep the two answers separate.
+  let shallow = false;
+  try {
+    shallow = execFileSync("git", ["rev-parse", "--is-shallow-repository"], { cwd: root, stdio: "pipe" })
+      .toString("utf8").trim() === "true";
+  } catch {
+    shallow = false;
+  }
+
+  const stale: { id: string; reason: string }[] = [];
+  const unknown: { id: string; sha: string }[] = [];
   for (const rec of active) {
     const anchorPaths = rec.anchors.map((a) => a.path);
     if (!rec.verified) {
-      staleLines.push(`STALE ${rec.id} — never verified (no verified: stamp)`);
+      stale.push({ id: rec.id, reason: "never verified (no verified: stamp)" });
       continue;
     }
     if (anchorPaths.length === 0) continue;
@@ -700,19 +712,45 @@ function cmdStale(root: string): number {
     try {
       execFileSync("git", ["rev-parse", "--verify", "--quiet", `${sha}^{commit}`], { cwd: root, stdio: "pipe" });
     } catch {
-      staleLines.push(`STALE ${rec.id} — verified sha ${sha} not found in history`);
+      // Unresolvable on a full clone is a real problem (rebased away or a
+      // fabricated stamp); on a shallow clone it is simply unknowable.
+      if (shallow) unknown.push({ id: rec.id, sha });
+      else stale.push({ id: rec.id, reason: `verified sha ${sha} not found in history (clone is complete — rebased away or fabricated stamp?)` });
       continue;
     }
     const changed = execFileSync("git", ["diff", "--name-only", sha, "--", ...anchorPaths], {
       cwd: root, maxBuffer: 16 * 1024 * 1024,
     }).toString("utf8").split("\n").filter(Boolean);
     if (changed.length > 0) {
-      staleLines.push(`STALE ${rec.id} — ${changed.length} anchor file(s) changed since ${sha.slice(0, 8)} (${rec.verified.date}): ${changed.slice(0, 3).join(", ")}${changed.length > 3 ? ", …" : ""}`);
+      stale.push({
+        id: rec.id,
+        reason: `${changed.length} anchor file(s) changed since ${sha.slice(0, 8)} (${rec.verified.date}): ${changed.slice(0, 3).join(", ")}${changed.length > 3 ? ", …" : ""}`,
+      });
     }
   }
 
-  console.log(`${active.length} active records · ${staleLines.length} stale · last sync ${lastSync}`);
-  for (const line of staleLines) console.log(line);
+  if (opts.json) {
+    console.log(JSON.stringify({
+      active: active.length,
+      staleCount: stale.length,
+      unknownCount: unknown.length,
+      shallow,
+      lastSync,
+      stale,
+      unknown,
+    }, null, 2));
+    return 0;
+  }
+
+  console.log(
+    `${active.length} active records · ${stale.length} stale` +
+    (unknown.length ? ` · ${unknown.length} unknown (shallow clone)` : "") +
+    ` · last sync ${lastSync}`,
+  );
+  for (const s of stale) console.log(`STALE ${s.id} — ${s.reason}`);
+  if (unknown.length > 0) {
+    console.log(`note: shallow clone — ${unknown.length} record(s) could not be checked. Deepen with \`git fetch --unshallow\` for a full staleness report.`);
+  }
   return 0;
 }
 
@@ -882,7 +920,7 @@ function main(): number {
       return cmdCheck(root, { json: flags.get("--json") === true, skipCommands: false, only: id });
     }
     case "stale":
-      return cmdStale(root);
+      return cmdStale(root, { json: flags.get("--json") === true });
     case "index":
       return cmdIndex(root);
     case "anchors": {
