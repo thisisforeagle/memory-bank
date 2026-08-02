@@ -21,7 +21,7 @@ Set up the memory-bank system in the current repository. Steps:
    - `memory:check` → `tsx <checker path> check`
    - `memory:index` → `tsx <checker path> index`
    - `memory:stale` → `tsx <checker path> stale`
-   - `memory:sync` → `tsx <checker path> sync`
+   - `memory:sync` → `tsx <checker path> sync` (the scope guard lives in the checker; call sites pass the flag — invoke as `npm run memory:sync -- --all`, or `-- --only <id>` for a single record)
    - Ensure `tsx` is available (devDependency or `npx tsx`).
 6. **Seed from stack** — distill current best practices for THIS repo's stack into starter records. Read `memory/STYLE.md` first (if present); every seeded record follows it. Skipping: if the user declined seeding but enabled testing, still run sub-steps a (stack detection), d, e, and f for the testing records only; if both were declined, skip this step entirely.
    - a. **Detect the stack.** Read manifests, do not guess:

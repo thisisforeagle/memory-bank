@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude%20Code-plugin-6366F1?style=flat-square&labelColor=0D1117" alt="Claude Code plugin">
-  <img src="https://img.shields.io/badge/version-0.2.0-22D3EE?style=flat-square&labelColor=0D1117" alt="version 0.2.0">
+  <img src="https://img.shields.io/badge/version-0.3.0-22D3EE?style=flat-square&labelColor=0D1117" alt="version 0.3.0">
   <img src="https://img.shields.io/badge/skills-5-A78BFA?style=flat-square&labelColor=0D1117" alt="5 skills">
   <img src="https://img.shields.io/badge/hooks-3%20non--blocking-3FB950?style=flat-square&labelColor=0D1117" alt="3 non-blocking hooks">
   <img src="https://img.shields.io/badge/runtime%20deps-0-3FB950?style=flat-square&labelColor=0D1117" alt="zero runtime dependencies">
@@ -223,15 +223,16 @@ What the edit-time nudge looks like in practice:
 | `/memorybank:new` | Capture a decision, convention, fact, feature, or deferred item at the moment it happens. |
 | `/memorybank:check` | Run the drift checker and explain any failure (which side drifted, how to reconcile). |
 | `/memorybank:review` | Full audit: hard failures plus semantic-drift candidates, with proposed record updates. |
-| `/memorybank:sync` | After a green check, regenerate `INDEX.md` and stamp `verified` on every active record. |
+| `/memorybank:sync` | After a green check, regenerate `INDEX.md` and stamp `verified` on every active record (blanket stamp, `--all`). |
 
 Under the hood each command drives the vendored `memory.ts` checker, which you can also call directly:
 
 ```bash
-npm run memory:check          # verify everything, exit 1 on drift  (the CI gate)
-npm run memory:index          # regenerate memory/INDEX.md
-npm run memory:stale          # records whose anchors moved since last verified sha
-npm run memory:sync           # green check, then stamp verified on all records
+npm run memory:check                # verify everything, exit 1 on drift  (the CI gate)
+npm run memory:index                # regenerate memory/INDEX.md
+npm run memory:stale                # records whose anchors moved since last verified sha
+npm run memory:sync -- --all        # green check, then stamp verified on all records
+npm run memory:sync -- --only <id>  # same check, but stamp that one record only
 ```
 
 <br>
@@ -281,6 +282,20 @@ What a caught drift looks like in CI:
 <p align="center">
   <img src="assets/check-fail.svg" alt="Terminal showing a memory:check drift failure" width="86%">
 </p>
+
+<br>
+
+## What's new in 0.3.0
+
+- **`memory:stale` is three-state.** Records whose `verified.sha` cannot be resolved in a shallow clone (the CI
+  default) are reported as **unknown**, excluded from the stale count, and get one hint to `git fetch --unshallow`.
+  In a complete clone an unresolvable sha is still loud STALE — it means the commit was rebased away or fabricated.
+- **`memory:stale --json`** emits `{ active, staleCount, unknownCount, shallow, lastSync, stale, unknown }`, so CI
+  can gate on real staleness while ignoring unknown.
+- **`memory:sync` is scoped.** `--only <id>` now stamps exactly that record (it used to be silently ignored and
+  everything got re-stamped); an unknown id exits non-zero and writes nothing.
+- **Blanket stamping needs `--all`** (breaking). Bare `npm run memory:sync` refuses with a non-zero exit and tells
+  you which flag to pass. The full check still runs before any stamp is written.
 
 <br>
 
