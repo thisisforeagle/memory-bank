@@ -16,7 +16,10 @@
  *   index    [--root <dir>]                               regenerate memory/INDEX.md
  *   anchors  --match <file> [--root <dir>]                record IDs anchored to a file
  *   new      <kind> --title "..." [--root <dir>]          scaffold a record from templates/
- *   sync     [--skip-commands] [--root <dir>]             green check, then stamp verified: on all records
+ *   sync     --all | --only <id> [--skip-commands] [--root <dir>]
+ *                                                         green check, then stamp verified: — --all stamps
+ *                                                         every active record, --only <id> stamps one;
+ *                                                         blanket stamping is opt-in and requires --all
  *
  * Frontmatter grammar (deliberately rigid — anything else is a loud error):
  *   - scalars: plain, 'single-quoted' ('' escapes '), "double-quoted" (JSON escapes)
@@ -854,12 +857,46 @@ function setVerified(root: string, rec: MemoryRecord, date: string, sha: string)
   fs.writeFileSync(full, lines.join("\n"));
 }
 
-function cmdSync(root: string, opts: { skipCommands: boolean }): number {
-  // 1. Regenerate the index so the freshness gate can't fail the sync.
+function cmdSync(root: string, opts: { skipCommands: boolean; only?: string; all?: boolean }): number {
+  // 1. Validate the scope BEFORE touching the disk — an error path must leave
+  //    the bank (including INDEX.md) byte-for-byte untouched.
+  if (opts.only && opts.all) {
+    console.error("--only and --all are mutually exclusive — pass --all to stamp every active record, or --only <id> to stamp one");
+    return 2;
+  }
+  if (opts.only || !opts.all) {
+    const { records, errors } = loadRecords(root);
+    if (errors.length) {
+      for (const e of errors) console.error(`SCHEMA ${e.message}`);
+      return 1;
+    }
+    if (!opts.only) {
+      // Blanket stamping is opt-in: re-stamping everything silently destroys
+      // the review state of records nobody actually looked at.
+      const n = records.filter((r) => r.status === "active").length;
+      console.error(`sync would stamp verified: on ${n} active record(s) — pass --all to stamp everything, or --only <id> to stamp one`);
+      return 2;
+    }
+    // Same semantics as runChecks' only-block: a typo or a retired id must be
+    // a loud error, not a no-op stamp.
+    const target = records.find((r) => r.id === opts.only);
+    if (!target) {
+      console.error(`${opts.only}: unknown record — no record with that id exists`);
+      return 1;
+    }
+    if (target.status !== "active") {
+      console.error(`${opts.only} (${target.file}): record status is '${target.status}', not active — nothing to verify`);
+      return 1;
+    }
+  }
+
+  // 2. Regenerate the index so the freshness gate can't fail the sync.
   const indexCode = cmdIndex(root);
   if (indexCode !== 0) return indexCode;
 
-  // 2. Full check — never stamp records that are failing.
+  // 3. Full check — never stamp records that are failing. Deliberately NOT
+  //    scoped to --only: a single record must never go green while the bank
+  //    as a whole is failing.
   const result = runChecks(root, { skipCommands: opts.skipCommands });
   if (result.failures.length > 0) {
     for (const f of result.failures) console.log(`FAIL ${f.message}`);
@@ -867,11 +904,15 @@ function cmdSync(root: string, opts: { skipCommands: boolean }): number {
     return 1;
   }
 
-  // 3. Stamp.
+  // 4. Stamp.
   const date = new Date().toISOString().slice(0, 10);
   const sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root }).toString("utf8").trim();
-  for (const rec of result.active) setVerified(root, rec, date, sha);
-  console.log(`stamped verified: { date: ${date}, sha: ${sha.slice(0, 12)} } on ${result.active.length} active record(s)`);
+  const targets = opts.only ? result.active.filter((r) => r.id === opts.only) : result.active;
+  for (const rec of targets) setVerified(root, rec, date, sha);
+  console.log(
+    `stamped verified: { date: ${date}, sha: ${sha.slice(0, 12)} } on ${targets.length} of ${result.active.length} active record(s)` +
+    (opts.only ? ` (--only ${opts.only})` : ""),
+  );
   if (opts.skipCommands && result.skippedCommands > 0) {
     console.log(`note: ${result.skippedCommands} command assertion(s) were skipped (--skip-commands)`);
   }
@@ -897,7 +938,7 @@ function main(): number {
   const positional: string[] = [];
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
-    if (a === "--json" || a === "--skip-commands") flags.set(a, true);
+    if (a === "--json" || a === "--skip-commands" || a === "--all") flags.set(a, true);
     else if (a === "--root" || a === "--match" || a === "--title" || a === "--only") {
       flags.set(a, argv[i + 1] ?? "");
       i += 1;
@@ -935,7 +976,11 @@ function main(): number {
       return cmdNew(root, kind, title, templatesDir);
     }
     case "sync":
-      return cmdSync(root, { skipCommands: flags.get("--skip-commands") === true });
+      return cmdSync(root, {
+        skipCommands: flags.get("--skip-commands") === true,
+        only: flags.get("--only") as string | undefined,
+        all: flags.get("--all") === true,
+      });
     default:
       console.error(
         "usage: memory <check|verify|stale|index|anchors|new|sync> [options]\n" +
@@ -945,7 +990,7 @@ function main(): number {
         "  index    —                            regenerate memory/INDEX.md\n" +
         "  anchors  --match <file>               record IDs anchored to a file (TSV: id, rule)\n" +
         '  new      <kind> --title "..."         scaffold a record (decision|convention|fact|feature|deferred)\n' +
-        "  sync     [--skip-commands]            green check, then stamp verified: on all active records\n" +
+        "  sync     --all | --only <id> [--skip-commands]  green check, then stamp verified: (--all: every active record; --only: one)\n" +
         "  common: --root <dir> (default: git toplevel)",
       );
       return 2;
