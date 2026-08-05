@@ -64,10 +64,14 @@ assert_rc_nonzero() {
   [ "$1" -ne 0 ] || fail "$2: expected a non-zero exit code, got 0"
 }
 
-# run_memory <args...> — runs the checker, sets globals OUT (stdout+stderr) and RC.
+# run_memory <args...> — runs the checker, sets globals STDOUT (stdout alone,
+# for JSON parsing — npm/npx warnings on stderr must never leak into it),
+# OUT (stdout + stderr, for human-readable assertions) and RC.
 run_memory() {
   RC=0
-  OUT=$(npx tsx "$PLUGIN_DIR/scripts/memory.ts" "$@" 2>&1) || RC=$?
+  local err="$TMP/run-memory.stderr"
+  STDOUT=$(npx tsx "$PLUGIN_DIR/scripts/memory.ts" "$@" 2>"$err") || RC=$?
+  OUT=$(printf '%s\n%s' "$STDOUT" "$(cat "$err")")
 }
 
 # make_repo <dir> — a real git repo seeded with fixtures/pass, everything committed.
@@ -165,7 +169,7 @@ assert_contains "$OUT" "3 active records" "stale (shallow)"
 
 run_memory stale --json --root "$SHALLOW"
 assert_rc_zero "$RC" "stale --json (shallow)"
-printf '%s\n' "$OUT" >"$TMP/stale-shallow.json"
+printf '%s\n' "$STDOUT" >"$TMP/stale-shallow.json"
 node -e '
 const fs = require("fs");
 const j = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
@@ -183,6 +187,17 @@ if (Array.isArray(j.stale) && j.stale.some((s) => s && s.id === "FACT-001")) {
 if (bad.length) { console.error(bad.join("; ")); process.exit(1); }
 ' "$TMP/stale-shallow.json" || { dump "$OUT"; fail "stale --json (shallow): assertions above failed"; }
 
+# A malformed (non-hex) sha is a broken stamp, not a shallow-clone artefact —
+# it must stay loud even here. CONV-001 flips from never-verified to
+# invalid-sha stale, so the counts stay at 2 stale / 1 unknown.
+stamp_verified "$SHALLOW/memory/records/conventions/CONV-001-no-legacy-token.md" 2026-01-01 "not-a-real-sha"
+run_memory stale --root "$SHALLOW"
+assert_rc_zero "$RC" "stale (shallow, malformed sha)"
+assert_contains "$OUT" "STALE CONV-001" "stale (shallow, malformed sha)"
+assert_contains "$OUT" "not a valid commit id" "stale (shallow, malformed sha)"
+assert_contains "$OUT" "2 stale" "stale (shallow, malformed sha)"
+assert_contains "$OUT" "1 unknown (shallow clone)" "stale (shallow, malformed sha)"
+
 # ---------------------------------------------------------------------------
 # 3. stale: complete clone + fabricated sha stays loud
 # ---------------------------------------------------------------------------
@@ -192,7 +207,9 @@ echo "== stale: complete clone + fabricated sha stays loud =="
 
 COMPLETE="$TMP/complete"
 make_repo "$COMPLETE"
-stamp_verified "$COMPLETE/$FACT_REL" 2026-01-01 0123456789012345678901234567890123456789
+# Hex letters matter: an all-digit sha is parsed as a YAML number and mangled,
+# tripping the invalid-commit-id guard instead of the not-in-history path.
+stamp_verified "$COMPLETE/$FACT_REL" 2026-01-01 0123456789abcdef0123456789abcdef01234567
 
 run_memory stale --root "$COMPLETE"
 assert_rc_zero "$RC" "stale (complete)"
@@ -301,6 +318,31 @@ assert_eq "$RC" "2" "sync --all --only exit code"
 AFTER=$(bank_sums "$SYNC_BOTH")
 if [ "$BEFORE" != "$AFTER" ]; then
   fail "sync --all --only: rejected the combination but still wrote to memory/"
+fi
+
+# ---------------------------------------------------------------------------
+# 8. sync --only without an id is a usage error, never a blanket stamp
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "== sync --only without an id is a usage error =="
+
+# --only consumes the next argument as its value, so it must come last here.
+BEFORE=$(bank_sums "$SYNC_BOTH")
+run_memory sync --root "$SYNC_BOTH" --only
+assert_rc_nonzero "$RC" "sync --only (no id)"
+assert_eq "$RC" "2" "sync --only (no id) exit code"
+assert_contains "$OUT" "requires a record id" "sync --only (no id)"
+
+# The dangerous variant: with --all also present, a silently-dropped empty
+# --only would blanket-stamp — exactly the bug class this PR fixes.
+run_memory sync --all --root "$SYNC_BOTH" --only
+assert_rc_nonzero "$RC" "sync --all --only (no id)"
+assert_eq "$RC" "2" "sync --all --only (no id) exit code"
+assert_not_contains "$OUT" "stamped verified:" "sync --all --only (no id)"
+AFTER=$(bank_sums "$SYNC_BOTH")
+if [ "$BEFORE" != "$AFTER" ]; then
+  fail "sync --only without an id: rejected but still wrote to memory/"
 fi
 
 echo ""

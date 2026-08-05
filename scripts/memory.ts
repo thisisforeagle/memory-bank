@@ -713,6 +713,12 @@ function cmdStale(root: string, opts: { json: boolean }): number {
     }
     if (anchorPaths.length === 0) continue;
     let sha = rec.verified.sha;
+    if (!/^[0-9a-f]{7,64}$/i.test(sha)) {
+      // A malformed sha can never resolve anywhere — that is a broken stamp,
+      // not a shallow-clone artefact, so it stays loud even on a shallow clone.
+      stale.push({ id: rec.id, reason: `verified sha '${sha}' is not a valid commit id — fabricated or corrupted stamp?` });
+      continue;
+    }
     try {
       execFileSync("git", ["rev-parse", "--verify", "--quiet", `${sha}^{commit}`], { cwd: root, stdio: "pipe" });
     } catch {
@@ -861,6 +867,12 @@ function setVerified(root: string, rec: MemoryRecord, date: string, sha: string)
 function cmdSync(root: string, opts: { skipCommands: boolean; only?: string; all?: boolean }): number {
   // 1. Validate the scope BEFORE touching the disk — an error path must leave
   //    the bank (including INDEX.md) byte-for-byte untouched.
+  if (opts.only === "") {
+    // `--only` as the last argument parses to an empty value; without this
+    // guard `sync --all --only` would silently blanket-stamp.
+    console.error("--only requires a record id — usage: memory sync --only <id>");
+    return 2;
+  }
   if (opts.only && opts.all) {
     console.error("--only and --all are mutually exclusive — pass --all to stamp every active record, or --only <id> to stamp one");
     return 2;
