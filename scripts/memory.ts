@@ -12,11 +12,15 @@
  * Subcommands:
  *   check    [--json] [--skip-commands] [--root <dir>]   verify everything, exit 1 on drift
  *   verify   <id> [--root <dir>]                          verify a single record
- *   stale    [--root <dir>]                               records whose anchors changed since last sync
+ *   stale    [--json] [--root <dir>]                      records whose anchors changed since last sync
+ *                                                         (three-state: stale / unknown on a shallow clone / fresh)
  *   index    [--root <dir>]                               regenerate memory/INDEX.md
  *   anchors  --match <file> [--root <dir>]                record IDs anchored to a file
  *   new      <kind> --title "..." [--root <dir>]          scaffold a record from templates/
- *   sync     [--skip-commands] [--root <dir>]             green check, then stamp verified: on all records
+ *   sync     --all | --only <id> [--skip-commands] [--root <dir>]
+ *                                                         green check, then stamp verified: — --all stamps
+ *                                                         every active record, --only <id> stamps one;
+ *                                                         blanket stamping is opt-in and requires --all
  *
  * Frontmatter grammar (deliberately rigid — anything else is a loud error):
  *   - scalars: plain, 'single-quoted' ('' escapes '), "double-quoted" (JSON escapes)
@@ -679,7 +683,7 @@ function cmdCheck(root: string, opts: { json: boolean; skipCommands: boolean; on
   return 1;
 }
 
-function cmdStale(root: string): number {
+function cmdStale(root: string, opts: { json: boolean }): number {
   const { records, errors } = loadRecords(root);
   if (errors.length) {
     for (const e of errors) console.error(`SCHEMA ${e.message}`);
@@ -688,31 +692,75 @@ function cmdStale(root: string): number {
   const active = records.filter((r) => r.status === "active");
   const lastSync = active.map((r) => r.verified?.date ?? "").filter(Boolean).sort().pop() ?? "never";
 
-  const staleLines: string[] = [];
+  // On a shallow clone (CI default: fetch-depth 1) almost no verified sha
+  // resolves, so an unresolvable sha means "cannot tell", not "stale". Detect
+  // shallowness once up front and keep the two answers separate.
+  let shallow = false;
+  try {
+    shallow = execFileSync("git", ["rev-parse", "--is-shallow-repository"], { cwd: root, stdio: "pipe" })
+      .toString("utf8").trim() === "true";
+  } catch {
+    shallow = false;
+  }
+
+  const stale: { id: string; reason: string }[] = [];
+  const unknown: { id: string; sha: string }[] = [];
   for (const rec of active) {
     const anchorPaths = rec.anchors.map((a) => a.path);
     if (!rec.verified) {
-      staleLines.push(`STALE ${rec.id} — never verified (no verified: stamp)`);
+      stale.push({ id: rec.id, reason: "never verified (no verified: stamp)" });
       continue;
     }
     if (anchorPaths.length === 0) continue;
     let sha = rec.verified.sha;
+    if (!/^[0-9a-f]{7,64}$/i.test(sha)) {
+      // A malformed sha can never resolve anywhere — that is a broken stamp,
+      // not a shallow-clone artefact, so it stays loud even on a shallow clone.
+      stale.push({ id: rec.id, reason: `verified sha '${sha}' is not a valid commit id — fabricated or corrupted stamp?` });
+      continue;
+    }
     try {
       execFileSync("git", ["rev-parse", "--verify", "--quiet", `${sha}^{commit}`], { cwd: root, stdio: "pipe" });
     } catch {
-      staleLines.push(`STALE ${rec.id} — verified sha ${sha} not found in history`);
+      // Unresolvable on a full clone is a real problem (rebased away or a
+      // fabricated stamp); on a shallow clone it is simply unknowable.
+      if (shallow) unknown.push({ id: rec.id, sha });
+      else stale.push({ id: rec.id, reason: `verified sha ${sha} not found in history (clone is complete — rebased away or fabricated stamp?)` });
       continue;
     }
     const changed = execFileSync("git", ["diff", "--name-only", sha, "--", ...anchorPaths], {
       cwd: root, maxBuffer: 16 * 1024 * 1024,
     }).toString("utf8").split("\n").filter(Boolean);
     if (changed.length > 0) {
-      staleLines.push(`STALE ${rec.id} — ${changed.length} anchor file(s) changed since ${sha.slice(0, 8)} (${rec.verified.date}): ${changed.slice(0, 3).join(", ")}${changed.length > 3 ? ", …" : ""}`);
+      stale.push({
+        id: rec.id,
+        reason: `${changed.length} anchor file(s) changed since ${sha.slice(0, 8)} (${rec.verified.date}): ${changed.slice(0, 3).join(", ")}${changed.length > 3 ? ", …" : ""}`,
+      });
     }
   }
 
-  console.log(`${active.length} active records · ${staleLines.length} stale · last sync ${lastSync}`);
-  for (const line of staleLines) console.log(line);
+  if (opts.json) {
+    console.log(JSON.stringify({
+      active: active.length,
+      staleCount: stale.length,
+      unknownCount: unknown.length,
+      shallow,
+      lastSync,
+      stale,
+      unknown,
+    }, null, 2));
+    return 0;
+  }
+
+  console.log(
+    `${active.length} active records · ${stale.length} stale` +
+    (unknown.length ? ` · ${unknown.length} unknown (shallow clone)` : "") +
+    ` · last sync ${lastSync}`,
+  );
+  for (const s of stale) console.log(`STALE ${s.id} — ${s.reason}`);
+  if (unknown.length > 0) {
+    console.log(`note: shallow clone — ${unknown.length} record(s) could not be checked. Deepen with \`git fetch --unshallow\` for a full staleness report.`);
+  }
   return 0;
 }
 
@@ -816,12 +864,52 @@ function setVerified(root: string, rec: MemoryRecord, date: string, sha: string)
   fs.writeFileSync(full, lines.join("\n"));
 }
 
-function cmdSync(root: string, opts: { skipCommands: boolean }): number {
-  // 1. Regenerate the index so the freshness gate can't fail the sync.
+function cmdSync(root: string, opts: { skipCommands: boolean; only?: string; all?: boolean }): number {
+  // 1. Validate the scope BEFORE touching the disk — an error path must leave
+  //    the bank (including INDEX.md) byte-for-byte untouched.
+  if (opts.only === "") {
+    // `--only` as the last argument parses to an empty value; without this
+    // guard `sync --all --only` would silently blanket-stamp.
+    console.error("--only requires a record id — usage: memory sync --only <id>");
+    return 2;
+  }
+  if (opts.only && opts.all) {
+    console.error("--only and --all are mutually exclusive — pass --all to stamp every active record, or --only <id> to stamp one");
+    return 2;
+  }
+  if (opts.only || !opts.all) {
+    const { records, errors } = loadRecords(root);
+    if (errors.length) {
+      for (const e of errors) console.error(`SCHEMA ${e.message}`);
+      return 1;
+    }
+    if (!opts.only) {
+      // Blanket stamping is opt-in: re-stamping everything silently destroys
+      // the review state of records nobody actually looked at.
+      const n = records.filter((r) => r.status === "active").length;
+      console.error(`sync would stamp verified: on ${n} active record(s) — pass --all to stamp everything, or --only <id> to stamp one`);
+      return 2;
+    }
+    // Same semantics as runChecks' only-block: a typo or a retired id must be
+    // a loud error, not a no-op stamp.
+    const target = records.find((r) => r.id === opts.only);
+    if (!target) {
+      console.error(`${opts.only}: unknown record — no record with that id exists`);
+      return 1;
+    }
+    if (target.status !== "active") {
+      console.error(`${opts.only} (${target.file}): record status is '${target.status}', not active — nothing to verify`);
+      return 1;
+    }
+  }
+
+  // 2. Regenerate the index so the freshness gate can't fail the sync.
   const indexCode = cmdIndex(root);
   if (indexCode !== 0) return indexCode;
 
-  // 2. Full check — never stamp records that are failing.
+  // 3. Full check — never stamp records that are failing. Deliberately NOT
+  //    scoped to --only: a single record must never go green while the bank
+  //    as a whole is failing.
   const result = runChecks(root, { skipCommands: opts.skipCommands });
   if (result.failures.length > 0) {
     for (const f of result.failures) console.log(`FAIL ${f.message}`);
@@ -829,11 +917,15 @@ function cmdSync(root: string, opts: { skipCommands: boolean }): number {
     return 1;
   }
 
-  // 3. Stamp.
+  // 4. Stamp.
   const date = new Date().toISOString().slice(0, 10);
   const sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root }).toString("utf8").trim();
-  for (const rec of result.active) setVerified(root, rec, date, sha);
-  console.log(`stamped verified: { date: ${date}, sha: ${sha.slice(0, 12)} } on ${result.active.length} active record(s)`);
+  const targets = opts.only ? result.active.filter((r) => r.id === opts.only) : result.active;
+  for (const rec of targets) setVerified(root, rec, date, sha);
+  console.log(
+    `stamped verified: { date: ${date}, sha: ${sha.slice(0, 12)} } on ${targets.length} of ${result.active.length} active record(s)` +
+    (opts.only ? ` (--only ${opts.only})` : ""),
+  );
   if (opts.skipCommands && result.skippedCommands > 0) {
     console.log(`note: ${result.skippedCommands} command assertion(s) were skipped (--skip-commands)`);
   }
@@ -859,7 +951,7 @@ function main(): number {
   const positional: string[] = [];
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
-    if (a === "--json" || a === "--skip-commands") flags.set(a, true);
+    if (a === "--json" || a === "--skip-commands" || a === "--all") flags.set(a, true);
     else if (a === "--root" || a === "--match" || a === "--title" || a === "--only") {
       flags.set(a, argv[i + 1] ?? "");
       i += 1;
@@ -882,7 +974,7 @@ function main(): number {
       return cmdCheck(root, { json: flags.get("--json") === true, skipCommands: false, only: id });
     }
     case "stale":
-      return cmdStale(root);
+      return cmdStale(root, { json: flags.get("--json") === true });
     case "index":
       return cmdIndex(root);
     case "anchors": {
@@ -897,17 +989,21 @@ function main(): number {
       return cmdNew(root, kind, title, templatesDir);
     }
     case "sync":
-      return cmdSync(root, { skipCommands: flags.get("--skip-commands") === true });
+      return cmdSync(root, {
+        skipCommands: flags.get("--skip-commands") === true,
+        only: flags.get("--only") as string | undefined,
+        all: flags.get("--all") === true,
+      });
     default:
       console.error(
         "usage: memory <check|verify|stale|index|anchors|new|sync> [options]\n" +
         "  check    [--json] [--skip-commands]   verify all records + INDEX freshness (exit 1 on drift)\n" +
         "  verify   <id>                         verify a single record\n" +
-        "  stale    —                            records whose anchors changed since last verified sha\n" +
+        "  stale    [--json]                     records whose anchors changed since last verified sha\n" +
         "  index    —                            regenerate memory/INDEX.md\n" +
         "  anchors  --match <file>               record IDs anchored to a file (TSV: id, rule)\n" +
         '  new      <kind> --title "..."         scaffold a record (decision|convention|fact|feature|deferred)\n' +
-        "  sync     [--skip-commands]            green check, then stamp verified: on all active records\n" +
+        "  sync     --all | --only <id> [--skip-commands]  green check, then stamp verified: (--all: every active record; --only: one)\n" +
         "  common: --root <dir> (default: git toplevel)",
       );
       return 2;

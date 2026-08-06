@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude%20Code-plugin-6366F1?style=flat-square&labelColor=0D1117" alt="Claude Code plugin">
-  <img src="https://img.shields.io/badge/version-0.2.0-22D3EE?style=flat-square&labelColor=0D1117" alt="version 0.2.0">
+  <img src="https://img.shields.io/badge/version-0.4.0-22D3EE?style=flat-square&labelColor=0D1117" alt="version 0.4.0">
   <img src="https://img.shields.io/badge/skills-5-A78BFA?style=flat-square&labelColor=0D1117" alt="5 skills">
   <img src="https://img.shields.io/badge/hooks-3%20non--blocking-3FB950?style=flat-square&labelColor=0D1117" alt="3 non-blocking hooks">
   <img src="https://img.shields.io/badge/runtime%20deps-0-3FB950?style=flat-square&labelColor=0D1117" alt="zero runtime dependencies">
@@ -177,14 +177,16 @@ record's `rule:` line verbatim, trimming rules at the source keeps the session d
 
 ## <img src="assets/icons/hooks.svg" height="23" align="top"> &nbsp;Hook recommendations
 
-The plugin ships three hooks that register automatically on install. **None of them block your work** and
-all are **silent in repositories without a `memory/` directory**, so the recommendation is simple: leave them
-enabled. Each degrades gracefully when an optional tool is missing.
+The plugin ships four hooks that register automatically on install. The first three **never block your work**
+and are **silent in repositories without a `memory/` directory**; the file-size guard is the one deliberate
+exception — it blocks an edit that leaves a source file over the line cap. Each degrades gracefully when an
+optional tool is missing.
 
 | Hook | Fires on | What it does | Needs |
 |---|---|---|---|
 | **SessionStart** | new session | Adds a status line: record count, stale records, last sync. Full digest still arrives via `@memory/INDEX.md`. | `node`, `npx tsx` (falls back to a bare count) |
 | **PostToolUse** | `Edit` / `Write` / `MultiEdit` | If the edited file is anchored by records, surfaces their IDs and rules so you reconcile before drifting. Pure bash/awk, no per-edit startup cost. | `jq`, `node` |
+| **PostToolUse** (file-size guard) | `Edit` / `Write` / `MultiEdit` | Blocks when the edited file exceeds **800 lines** (`MEMORYBANK_MAX_FILE_LINES` to change). Lockfiles, generated/minified/vendored output, rules and data files are auto-exempt; add repo-specific globs to `.file-size-ignore`. `file-size-guard.sh --all` runs the same check over every tracked file for CI. | `jq` |
 | **Stop** | end of turn | Once per session: if anchored files changed but nothing under `memory/` did, reminds you to capture the decision or consciously skip. | `jq`, `node` |
 
 What the edit-time nudge looks like in practice:
@@ -223,15 +225,16 @@ What the edit-time nudge looks like in practice:
 | `/memorybank:new` | Capture a decision, convention, fact, feature, or deferred item at the moment it happens. |
 | `/memorybank:check` | Run the drift checker and explain any failure (which side drifted, how to reconcile). |
 | `/memorybank:review` | Full audit: hard failures plus semantic-drift candidates, with proposed record updates. |
-| `/memorybank:sync` | After a green check, regenerate `INDEX.md` and stamp `verified` on every active record. |
+| `/memorybank:sync` | After a green check, regenerate `INDEX.md` and stamp `verified` on every active record (blanket stamp, `--all`). |
 
 Under the hood each command drives the vendored `memory.ts` checker, which you can also call directly:
 
 ```bash
-npm run memory:check          # verify everything, exit 1 on drift  (the CI gate)
-npm run memory:index          # regenerate memory/INDEX.md
-npm run memory:stale          # records whose anchors moved since last verified sha
-npm run memory:sync           # green check, then stamp verified on all records
+npm run memory:check                # verify everything, exit 1 on drift  (the CI gate)
+npm run memory:index                # regenerate memory/INDEX.md
+npm run memory:stale                # records whose anchors moved since last verified sha
+npm run memory:sync -- --all        # green check, then stamp verified on all records
+npm run memory:sync -- --only <id>  # same check, but stamp that one record only
 ```
 
 <br>
@@ -281,6 +284,29 @@ What a caught drift looks like in CI:
 <p align="center">
   <img src="assets/check-fail.svg" alt="Terminal showing a memory:check drift failure" width="86%">
 </p>
+
+<br>
+
+## What's new in 0.4.0
+
+- **File-size guard.** A new PostToolUse hook blocks edits that leave a source file over **800 lines**
+  (`MEMORYBANK_MAX_FILE_LINES` overrides), nudging toward smaller modules at the moment the file grows. The same
+  script gates CI: `bash memory/file-size-guard.sh --all` fails the build while any tracked file is over the cap.
+- **Sensible exemptions.** Lockfiles, minified/bundled/vendored output, generated code, rules and data files, and
+  the single-file vendored checker itself are exempt by default; `.file-size-ignore` at the repo root (one glob
+  per line) exempts anything else that is legitimately large.
+
+## What's new in 0.3.0
+
+- **`memory:stale` is three-state.** Records whose `verified.sha` cannot be resolved in a shallow clone (the CI
+  default) are reported as **unknown**, excluded from the stale count, and get one hint to `git fetch --unshallow`.
+  In a complete clone an unresolvable sha is still loud STALE — it means the commit was rebased away or fabricated.
+- **`memory:stale --json`** emits `{ active, staleCount, unknownCount, shallow, lastSync, stale, unknown }`, so CI
+  can gate on real staleness while ignoring unknown.
+- **`memory:sync` is scoped.** `--only <id>` now stamps exactly that record (it used to be silently ignored and
+  everything got re-stamped); an unknown id exits non-zero and writes nothing.
+- **Blanket stamping needs `--all`** (breaking). Bare `npm run memory:sync` refuses with a non-zero exit and tells
+  you which flag to pass. The full check still runs before any stamp is written.
 
 <br>
 
