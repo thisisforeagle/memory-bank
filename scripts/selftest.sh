@@ -320,6 +320,12 @@ if [ "$BEFORE" != "$AFTER" ]; then
   fail "sync --all --only: rejected the combination but still wrote to memory/"
 fi
 
+# run_guard <args-or-stdin...> — file-size-guard.sh wrapper, same OUT/RC contract.
+run_guard() {
+  RC=0
+  OUT=$(bash "$PLUGIN_DIR/hooks/file-size-guard.sh" "$@" 2>&1) || RC=$?
+}
+
 # ---------------------------------------------------------------------------
 # 8. sync --only without an id is a usage error, never a blanket stamp
 # ---------------------------------------------------------------------------
@@ -344,6 +350,57 @@ AFTER=$(bank_sums "$SYNC_BOTH")
 if [ "$BEFORE" != "$AFTER" ]; then
   fail "sync --only without an id: rejected but still wrote to memory/"
 fi
+
+# ---------------------------------------------------------------------------
+# 9. file-size guard: 800-line cap, exemptions, hook mode
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "== file-size guard: cap, exemptions, hook mode =="
+
+GUARD_REPO="$TMP/guard"
+mkdir -p "$GUARD_REPO"
+git init -q "$GUARD_REPO"
+git -C "$GUARD_REPO" config user.email test@example.com
+git -C "$GUARD_REPO" config user.name test
+git -C "$GUARD_REPO" config commit.gpgsign false
+seq 1 801 >"$GUARD_REPO/big.ts"
+seq 1 801 >"$GUARD_REPO/yarn.lock"
+seq 1 10 >"$GUARD_REPO/small.ts"
+git -C "$GUARD_REPO" add -A
+git -C "$GUARD_REPO" commit -q -m "guard fixtures"
+
+# Tracked 801-line file fails --all; the lockfile is built-in exempt.
+run_guard --all --root "$GUARD_REPO"
+assert_rc_nonzero "$RC" "guard --all (violation)"
+assert_contains "$OUT" "FAIL big.ts: 801 lines" "guard --all (violation)"
+assert_not_contains "$OUT" "yarn.lock" "guard --all (lockfile exempt)"
+
+# .file-size-ignore exempts it.
+echo "big.ts" >"$GUARD_REPO/.file-size-ignore"
+git -C "$GUARD_REPO" add -A
+git -C "$GUARD_REPO" commit -q -m "exempt big.ts"
+run_guard --all --root "$GUARD_REPO"
+assert_rc_zero "$RC" "guard --all (.file-size-ignore)"
+assert_contains "$OUT" "none over 800 lines" "guard --all (.file-size-ignore)"
+
+# Hook mode: over-cap non-exempt file blocks with exit 2 and guidance...
+rm "$GUARD_REPO/.file-size-ignore"
+RC=0
+OUT=$(printf '{"tool_input":{"file_path":"%s"}}' "$GUARD_REPO/big.ts" \
+  | CLAUDE_PROJECT_DIR="$GUARD_REPO" bash "$PLUGIN_DIR/hooks/file-size-guard.sh" 2>&1) || RC=$?
+assert_eq "$RC" "2" "guard hook (violation) exit code"
+assert_contains "$OUT" "over the 800-line cap" "guard hook (violation)"
+assert_contains "$OUT" ".file-size-ignore" "guard hook (violation guidance)"
+
+# ...an exempt file and a small file stay silent.
+for f in yarn.lock small.ts; do
+  RC=0
+  OUT=$(printf '{"tool_input":{"file_path":"%s"}}' "$GUARD_REPO/$f" \
+    | CLAUDE_PROJECT_DIR="$GUARD_REPO" bash "$PLUGIN_DIR/hooks/file-size-guard.sh" 2>&1) || RC=$?
+  assert_rc_zero "$RC" "guard hook ($f)"
+  assert_eq "$OUT" "" "guard hook ($f) output"
+done
 
 echo ""
 echo "selftest OK"

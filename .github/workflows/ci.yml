@@ -1,0 +1,19 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Self-test the checker
+        run: bash scripts/selftest.sh
+      - name: File-size guard (800-line cap)
+        run: bash hooks/file-size-guard.sh --all

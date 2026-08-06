@@ -12,7 +12,7 @@
       "name": "memorybank",
       "source": "./",
       "description": "Structured, drift-checked memory records for AI agents: decisions, conventions, facts, features, and deferred work — with CI-verifiable assertions that fail the build when memory and code diverge.",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "author": {
         "name": "091 Solutions"
       },
